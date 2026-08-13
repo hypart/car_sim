@@ -1,5 +1,7 @@
 #include "deps.hpp"
 
+#pragma once
+
 struct Vec3D{
 
     float x;
