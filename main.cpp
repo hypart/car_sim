@@ -41,9 +41,6 @@ int main(int argc, const char* argv[]){
         if(!(frame_count % phys_per_disp_FPS)){
             BeginDrawing();
                 ClearBackground(BLACK);
-                std::cout   << car.com_pos.x << "\n"
-                            << car.com_pos.y << "\n"
-                            << car.tc<< "\n";
                 DrawLine(
                     car.com_pos.x*dist_scale, car.com_pos.y*dist_scale,
                     (car.com_pos.x + std::cos(car.tc))*dist_scale, (car.com_pos.y + std::sin(car.tc))*dist_scale,

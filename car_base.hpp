@@ -22,29 +22,6 @@ wireMesh(){
 
 };
 
-struct carDynState{
-    float dvl, dvt;
-};
-
-struct carState{
-    float vl; //longitudonal velocity component of chassis CoM [m/s]
-    float vt; //transverse velocity component of chassis CoM [m/s]
-    float ts; //steer control rotation, at the center of the front axle
-    float tr; //rotation of right tire with respect to longitudonal chassis axis [rad]
-    float tl; //rotation of left tire with respect to longitudonal chassis axis [rad]
-
-    carState apply_timestep(float dt, const carDynState& ds){
-        carState s{
-            vl + dt * ds.dvl,
-            vt + dt * ds.dvt,
-            ts,
-            tr,
-            tl
-        };
-        return s;
-    }
-};
-
 class carBase{
 public:
     wireMesh bodymesh;
@@ -53,7 +30,10 @@ public:
     Vec3D com_pos; //position of the center of mass [m]
     float tc; //rotation of chassis with respect to global x axis [rad]
 
-    carState state;
+    float vl; //longitudonal velocity component of chassis CoM [m/s]
+    float ts; //steer control rotation, at the center of the front axle
+    float tr; //rotation of right tire with respect to longitudonal chassis axis [rad]
+    float tl; //rotation of left tire with respect to longitudonal chassis axis [rad]
 
     float w; //wheelbase width
     float l; //wheelbase length
@@ -73,38 +53,10 @@ public:
         return brake/4;
     }
 
-    float dtc_dt(const carState& s){
-        if (abs(s.ts) < steer_eps) return 0.0;
-        float r = l * std::hypot(1/std::tan(s.ts), 0.25);
-        float ts_sign = s.ts/std::abs(s.ts);
-
-        float bpw = brake_per_wheel();
-
-        // braking acceleration caused by angled wheels
-        float brake_accel_right = bpw * l / std::sin(-s.tr);
-        float brake_accel_left = bpw * l / std::sin(-s.tl);
-
-        return ts_sign * (std::hypot(s.vt, s.vl) / r) + brake_accel_left + brake_accel_right;
-    }
-
-    float dvl_dt(const carState& s){
+    float dvl_dt(){
         float v_sign = 0.0;
-        if (std::abs(s.vl) > vel_eps) v_sign = s.vl/std::abs(s.vl);
-        return accel()/m - d*s.vl - v_sign*brake_per_wheel()*(2 + std::cos(s.tr) + std::cos(s.tl));
-    }
-
-    float dvt_dt(const carState& s){
-        if (abs(s.ts) < steer_eps) return 0.0;
-        float r = l * std::hypot(1/std::tan(s.ts), 0.25);
-        float ts_sign = s.ts/std::abs(s.ts);
-        return ts_sign * ((std::pow(s.vl, 2) + std::pow(s.vt, 2)) / r) - brake_per_wheel()*(std::sin(s.tr) + std::sin(s.tl));
-    }
-
-    carDynState derivatives(const carState& s){
-        float dvl = dvl_dt(s);
-        float dvt = dvt_dt(s);
-        carDynState ds{dvl, dvt};
-        return ds;
+        if (std::abs(vl) > vel_eps) v_sign = vl/std::abs(vl);
+        return accel()/m - d*vl - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
     }
 
     std::tuple<float, float> wheel_rots(float curr_ts){
@@ -130,8 +82,8 @@ public:
     }
 
     void update_control(float throttle_command, float brake_command, float steer_command){
-        state.ts = steer_command;
-        std::tie(state.tr, state.tl) = wheel_rots(state.ts);
+        ts = steer_command;
+        std::tie(tr, tl) = wheel_rots(ts);
         
         throttle = throttle_command;
         brake = brake_command;
@@ -150,7 +102,10 @@ public:
 
         com_pos = init_pos;
 
-        state = carState{0.0, 0.0, 0.0, 0.0, 0.0};
+        vl = 0.0;
+        ts = 0.0;
+        tr = 0.0;
+        tl = 0.0;
 
         throttle = 0.0;
         brake = 0.0;
@@ -165,31 +120,23 @@ public:
 
         float thr_smooth = throttle_command * (1-thr_delay) + throttle * thr_delay;
         float brk_smooth = brake_command * (1-brk_delay) + brake * brk_delay;
-        float str_smooth = steer_command * (1-str_delay) + state.ts * str_delay;
+        float str_smooth = steer_command * (1-str_delay) + ts * str_delay;
         
         update_control(thr_smooth, brk_smooth, str_smooth);
     }
 
     void update_state(float dt){
-        state = state.apply_timestep(dt, derivatives(state));
+        vl += dt * dvl_dt();
 
-        if(abs(state.vt) < vel_eps){
-            tc = 0.0;
-        }
-        else{
-            float tv = std::atan2(state.vt, state.vl);
-            float sgn_rot = state.vt / std::abs(state.vt);
-            float r = l/(2*tan(tv));
-            tc += sgn_rot*std::hypot(state.vl, state.vt)/r * dt;
+        if(abs(ts) > steer_eps){
+            float rn = l/tan(ts);
+            tc += vl/rn * dt;
         }
         
-        float st = std::sin(tc);
-        float ct = std::cos(tc);
         com_pos += Vec3D(
-            state.vl * ct - state.vt * st,
-            state.vl * st + state.vt * ct,
+            vl * std::cos(tc),
+            vl * std::sin(tc),
             0.0
         ) * dt;
     }
-
 };
