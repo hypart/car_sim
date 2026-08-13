@@ -6,15 +6,11 @@ uint phys_per_disp_FPS = 10; //physics frames per displayed frame
 
 
 int main(int argc, const char* argv[]){
-    std::vector<Vec3D> body_nodes;
-    std::vector<std::tuple<uint, uint>> body_connectivity;
-    wireMesh body = wireMesh(body_nodes, body_connectivity);
-    wireMesh wheel = wireMesh(body_nodes, body_connectivity);
 
-    int h = 432;
-    int w = 768;
+    int h = 500;
+    int w = 1000;
 
-    carBase car = carBase(2.0, 1.0, 1.0, 0.01, body, wheel, Vec3D(1.0f, 1.0f, 0.0f));
+    carBase car = carBase(2.0, 1.0, 1.0, 0.01, Vec3D(1.0f, 1.0f, 0.0f));
 
     float throttle = 0.0;
     float steer = 0.0;
@@ -41,11 +37,7 @@ int main(int argc, const char* argv[]){
         if(!(frame_count % phys_per_disp_FPS)){
             BeginDrawing();
                 ClearBackground(BLACK);
-                DrawLine(
-                    car.com_pos.x*dist_scale, car.com_pos.y*dist_scale,
-                    (car.com_pos.x + std::cos(car.tc))*dist_scale, (car.com_pos.y + std::sin(car.tc))*dist_scale,
-                    WHITE
-                );
+                car.draw(dist_scale);
             EndDrawing();
         }
 

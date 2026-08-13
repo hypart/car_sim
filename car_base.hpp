@@ -7,18 +7,18 @@ constexpr float vel_eps = 1e-6;
 
 struct wireMesh{
 
-std::vector<Vec3D> vertices;
-std::vector<std::tuple<uint, uint>> connectivity;
+    std::vector<Vec3D> vertices;
+    std::vector<std::tuple<uint, uint>> connectivity;
 
-wireMesh(std::vector<Vec3D> _vertices, std::vector<std::tuple<uint, uint>> _connectivity){
-    vertices = _vertices;
-    connectivity = _connectivity;
-}
+    wireMesh(std::vector<Vec3D> _vertices, std::vector<std::tuple<uint, uint>> _connectivity){
+        vertices = _vertices;
+        connectivity = _connectivity;
+    }
 
-wireMesh(){
-    vertices = {};
-    connectivity = {};
-}
+    wireMesh(){
+        vertices = {};
+        connectivity = {};
+    }
 
 };
 
@@ -91,16 +91,23 @@ public:
 
 public:
 
-    carBase(float length, float width, float mass, float drag, wireMesh body, wireMesh wheel, Vec3D init_pos){
+    carBase(float length, float width, float mass, float drag, Vec3D init_pos){
         l = length;
         w = width;
         m = mass;
         d = drag;
 
-        bodymesh = body;
-        wheelmesh = wheel;
+        std::vector<Vec3D> body_corners = {Vec3D(-l/2, -w/2, 0.0), Vec3D(l/2, -w/2, 0.0), Vec3D(l/2, w/2, 0.0), Vec3D(-l/2, w/2, 0.0)};
+        std::vector<std::tuple<uint, uint>> body_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
+
+        std::vector<Vec3D> wheel_corners = {Vec3D(-l/10, -l/20, 0.0), Vec3D(l/10, -l/20, 0.0), Vec3D(l/10, l/20, 0.0), Vec3D(-l/10, l/20, 0.0)};
+        std::vector<std::tuple<uint, uint>> wheel_conn = body_conn;
+
+        bodymesh = wireMesh(body_corners, body_conn);
+        wheelmesh = wireMesh(wheel_corners, wheel_conn);
 
         com_pos = init_pos;
+        tc = 0.0;
 
         vl = 0.0;
         ts = 0.0;
@@ -114,9 +121,9 @@ public:
     void input_control(float throttle_command, float brake_command, float steer_command){
 
         //between 0 and 1 (0: immediate reaction)
-        float thr_delay = 0.5;
-        float str_delay = 0.5;
-        float brk_delay = 0.5;
+        float thr_delay = 0.0;
+        float str_delay = 0.999;
+        float brk_delay = 0.999;
 
         float thr_smooth = throttle_command * (1-thr_delay) + throttle * thr_delay;
         float brk_smooth = brake_command * (1-brk_delay) + brake * brk_delay;
@@ -132,11 +139,48 @@ public:
             float rn = l/tan(ts);
             tc += vl/rn * dt;
         }
-        
+
         com_pos += Vec3D(
             vl * std::cos(tc),
             vl * std::sin(tc),
             0.0
         ) * dt;
+    }
+
+    void draw(float zoom){
+
+        std::vector<Vec3D> body_corners;
+
+        //body
+        for(std::tuple<uint, uint> idcs : bodymesh.connectivity){
+            Vec3D start = bodymesh.vertices[std::get<0>(idcs)];
+            Vec3D end = bodymesh.vertices[std::get<1>(idcs)];
+
+            start = com_pos + start.rotate(Vec3D(0.0, 0.0, tc));
+            end = com_pos + end.rotate(Vec3D(0.0, 0.0, tc));
+
+            body_corners.push_back(start);
+
+            DrawLine(start.x*zoom, start.y*zoom, end.x*zoom, end.y*zoom, WHITE);
+        }
+
+        //wheels
+        int wheel_idx = 0;
+        for(Vec3D p : body_corners){
+            for(std::tuple<uint, uint> idcs : wheelmesh.connectivity){
+                Vec3D start = wheelmesh.vertices[std::get<0>(idcs)];
+                Vec3D end = wheelmesh.vertices[std::get<1>(idcs)];
+                float rot = tc;
+
+                if (wheel_idx == 1) rot += tr;
+                if (wheel_idx == 2) rot += tl;
+
+                start = p + start.rotate(Vec3D(0.0, 0.0, rot));
+                end = p + end.rotate(Vec3D(0.0, 0.0, rot));
+
+                DrawLine(start.x*zoom, start.y*zoom, end.x*zoom, end.y*zoom, WHITE);
+            }
+            wheel_idx++;
+        }
     }
 };

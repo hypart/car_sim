@@ -103,6 +103,7 @@ struct Vec3D{
     }
 
     Vec3D rotate(const Vec3D& v) const{
+        if(v.len() < 1e-8) return *this;
         float angle = v.len();
         float s = std::sin(angle)/angle;
         float c = (1-std::cos(angle))/(angle*angle);
