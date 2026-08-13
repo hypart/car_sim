@@ -62,20 +62,20 @@ public:
     std::tuple<float, float> wheel_rots(float curr_ts){
         float tr;
         float tl;
-        if(abs(curr_ts) < steer_eps){
+        if(std::abs(curr_ts) < steer_eps){
             tr = 0.0;
             tl = 0.0;
         }
         else{
-            float ti = pi/2 - std::atan(1/std::tan(curr_ts) - w/(2*l)); //inside wheel angle
-            float to = pi/2 - std::atan(1/std::tan(curr_ts) + w/(2*l)); //outside wheel angle
+            float ti = pi/2 - std::atan(1/std::tan(std::abs(curr_ts)) - w/(2*l)); //inside wheel angle
+            float to = pi/2 - std::atan(1/std::tan(std::abs(curr_ts)) + w/(2*l)); //outside wheel angle
             if(curr_ts > 0.0){
-                tr = ti;
-                tl = to;
-            }
-            else{
                 tr = to;
                 tl = ti;
+            }
+            else{
+                tr = -ti;
+                tl = -to;
             }
         }
         return {tr, tl};
@@ -97,11 +97,13 @@ public:
         m = mass;
         d = drag;
 
-        std::vector<Vec3D> body_corners = {Vec3D(-l/2, -w/2, 0.0), Vec3D(l/2, -w/2, 0.0), Vec3D(l/2, w/2, 0.0), Vec3D(-l/2, w/2, 0.0)};
+        // TODO: quick fix to shift the mesh so the axle is at the com, fix this in the kinematics later
+        std::vector<Vec3D> body_corners = {Vec3D(0.0, -w/2, 0.0), Vec3D(l, -w/2, 0.0), Vec3D(l, w/2, 0.0), Vec3D(0.0, w/2, 0.0)};
         std::vector<std::tuple<uint, uint>> body_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
 
-        std::vector<Vec3D> wheel_corners = {Vec3D(-l/10, -l/20, 0.0), Vec3D(l/10, -l/20, 0.0), Vec3D(l/10, l/20, 0.0), Vec3D(-l/10, l/20, 0.0)};
-        std::vector<std::tuple<uint, uint>> wheel_conn = body_conn;
+        std::vector<Vec3D> wheel_corners = {Vec3D(-l/10, -l/20, 0.0), Vec3D(l/10, -l/20, 0.0), Vec3D(l/10, l/20, 0.0), Vec3D(-l/10, l/20, 0.0),
+                                            Vec3D(0.0, -1000.0, 0.0), Vec3D(0.0, 1000.0, 0.0)};
+        std::vector<std::tuple<uint, uint>> wheel_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}};
 
         bodymesh = wireMesh(body_corners, body_conn);
         wheelmesh = wireMesh(wheel_corners, wheel_conn);
@@ -135,7 +137,7 @@ public:
     void update_state(float dt){
         vl += dt * dvl_dt();
 
-        if(abs(ts) > steer_eps){
+        if(std::abs(ts) > steer_eps){
             float rn = l/tan(ts);
             tc += vl/rn * dt;
         }
