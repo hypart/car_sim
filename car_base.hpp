@@ -1,5 +1,4 @@
 #include "deps.hpp"
-#include "vec.hpp"
 
 constexpr float pi =  3.14159265358979323846f;
 constexpr float steer_eps = 1e-6;
@@ -7,10 +6,10 @@ constexpr float vel_eps = 1e-6;
 
 struct wireMesh{
 
-    std::vector<Vec3D> vertices;
+    std::vector<Eigen::Vector3f> vertices;
     std::vector<std::tuple<uint, uint>> connectivity;
 
-    wireMesh(std::vector<Vec3D> _vertices, std::vector<std::tuple<uint, uint>> _connectivity){
+    wireMesh(std::vector<Eigen::Vector3f> _vertices, std::vector<std::tuple<uint, uint>> _connectivity){
         vertices = _vertices;
         connectivity = _connectivity;
     }
@@ -27,7 +26,7 @@ public:
     wireMesh bodymesh;
     wireMesh wheelmesh;
 
-    Vec3D com_pos; //position of the center of mass [m]
+    Eigen::Vector3f com_pos; //position of the center of mass [m]
     float tc; //rotation of chassis with respect to global x axis [rad]
 
     float vl; //longitudonal velocity component of chassis CoM [m/s]
@@ -91,19 +90,18 @@ public:
 
 public:
 
-    carBase(float length, float width, float mass, float drag, Vec3D init_pos){
+    carBase(float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
         l = length;
         w = width;
         m = mass;
         d = drag;
 
         // TODO: quick fix to shift the mesh so the axle is at the com, fix this in the kinematics later
-        std::vector<Vec3D> body_corners = {Vec3D(0.0, -w/2, 0.0), Vec3D(l, -w/2, 0.0), Vec3D(l, w/2, 0.0), Vec3D(0.0, w/2, 0.0)};
+        std::vector<Eigen::Vector3f> body_corners = {{0.0, -w/2, 0.0}, {l, -w/2, 0.0}, {l, w/2, 0.0}, {0.0, w/2, 0.0}};
         std::vector<std::tuple<uint, uint>> body_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
 
-        std::vector<Vec3D> wheel_corners = {Vec3D(-l/10, -l/20, 0.0), Vec3D(l/10, -l/20, 0.0), Vec3D(l/10, l/20, 0.0), Vec3D(-l/10, l/20, 0.0),
-                                            Vec3D(0.0, -1000.0, 0.0), Vec3D(0.0, 1000.0, 0.0)};
-        std::vector<std::tuple<uint, uint>> wheel_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}};
+        std::vector<Eigen::Vector3f> wheel_corners = {{-l/10, -l/20, 0.0}, {l/10, -l/20, 0.0}, {l/10, l/20, 0.0}, {-l/10, l/20, 0.0}};
+        std::vector<std::tuple<uint, uint>> wheel_conn = body_conn;
 
         bodymesh = wireMesh(body_corners, body_conn);
         wheelmesh = wireMesh(wheel_corners, wheel_conn);
@@ -142,45 +140,49 @@ public:
             tc += vl/rn * dt;
         }
 
-        com_pos += Vec3D(
+        com_pos += Eigen::Vector3f(
             vl * std::cos(tc),
             vl * std::sin(tc),
             0.0
-        ) * dt;
+        )* dt;
     }
 
     void draw(float zoom){
 
-        std::vector<Vec3D> body_corners;
+        std::vector<Eigen::Vector3f> body_corners;
 
         //body
         for(std::tuple<uint, uint> idcs : bodymesh.connectivity){
-            Vec3D start = bodymesh.vertices[std::get<0>(idcs)];
-            Vec3D end = bodymesh.vertices[std::get<1>(idcs)];
+            Eigen::Vector3f start = bodymesh.vertices[std::get<0>(idcs)];
+            Eigen::Vector3f end = bodymesh.vertices[std::get<1>(idcs)];
 
-            start = com_pos + start.rotate(Vec3D(0.0, 0.0, tc));
-            end = com_pos + end.rotate(Vec3D(0.0, 0.0, tc));
+            Eigen::Vector3f axis(0.0f, 0.0f, 1.0f);
+
+            start = com_pos + Eigen::AngleAxisf(tc, axis) * start;
+            end = com_pos + Eigen::AngleAxisf(tc, axis) * end;
 
             body_corners.push_back(start);
 
-            DrawLine(start.x*zoom, start.y*zoom, end.x*zoom, end.y*zoom, WHITE);
+            DrawLine(start.x()*zoom, start.y()*zoom, end.x()*zoom, end.y()*zoom, WHITE);
         }
 
         //wheels
         int wheel_idx = 0;
-        for(Vec3D p : body_corners){
+        for(Eigen::Vector3f p : body_corners){
             for(std::tuple<uint, uint> idcs : wheelmesh.connectivity){
-                Vec3D start = wheelmesh.vertices[std::get<0>(idcs)];
-                Vec3D end = wheelmesh.vertices[std::get<1>(idcs)];
-                float rot = tc;
+                Eigen::Vector3f start = wheelmesh.vertices[std::get<0>(idcs)];
+                Eigen::Vector3f end = wheelmesh.vertices[std::get<1>(idcs)];
 
+                float rot = tc;
                 if (wheel_idx == 1) rot += tr;
                 if (wheel_idx == 2) rot += tl;
 
-                start = p + start.rotate(Vec3D(0.0, 0.0, rot));
-                end = p + end.rotate(Vec3D(0.0, 0.0, rot));
+                Eigen::Vector3f axis(0.0f, 0.0f, 1.0f);
 
-                DrawLine(start.x*zoom, start.y*zoom, end.x*zoom, end.y*zoom, WHITE);
+                start = p + Eigen::AngleAxisf(rot, axis) * start;
+                end = p + Eigen::AngleAxisf(rot, axis) * end;
+
+                DrawLine(start.x()*zoom, start.y()*zoom, end.x()*zoom, end.y()*zoom, WHITE);
             }
             wheel_idx++;
         }

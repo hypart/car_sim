@@ -10,7 +10,7 @@ int main(int argc, const char* argv[]){
     int h = 500;
     int w = 1000;
 
-    carBase car = carBase(2.0, 1.0, 1.0, 0.01, Vec3D(1.0f, 1.0f, 0.0f));
+    carBase car = carBase(2.0, 1.0, 1.0, 0.01, Eigen::Vector3f(1.0f, 1.0f, 0.0f));
 
     float throttle = 0.0;
     float steer = 0.0;

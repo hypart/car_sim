@@ -14,5 +14,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(
+    eigen
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG 3.4.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(eigen)
+
 add_executable(car main.cpp)
-target_link_libraries(car PRIVATE raylib)
+target_link_libraries(car PRIVATE raylib Eigen3::Eigen)
