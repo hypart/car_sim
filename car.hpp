@@ -1,4 +1,5 @@
 #include "deps.hpp"
+#include "drivetrain.hpp"
 
 constexpr float pi =  3.14159265358979323846f;
 constexpr float steer_eps = 1e-10;
@@ -38,79 +39,16 @@ public:
     float tr = 0.0f; //rotation of right tire with respect to longitudonal chassis axis [rad]
     float tl = 0.0f; //rotation of left tire with respect to longitudonal chassis axis [rad]
 
-    float w_engine = 0.0f; //rotational velocity of engine [rad/s]
-
     float w; //wheelbase width
     float l; //wheelbase length
     float m; //car mass
     float d; //drag coefficient
 
-    float max_torque;
-
-    float throttle = 0.0f; //throttle command
-    float throttle_min = 0.0f;
-    float brake = 0.0f; //braking command
-
-    float clutch = 0.0f; //0 disengaged 1 fully engaged
-    int gear = 0;
-    std::vector<float> ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
-    float final_drive_ratio = 4.0;
-
-    float I_engine = 0.25f;
     float I_wheels;
 
-    float engine_friction; //derived in the constructor from max_torque and w_peak
-    float drag_exp = 3.0;
+    float brake = 0.0f; //braking command
 
-    float w_idle = 90.0f;
-    float w_redline = 700.0f;
-
-    float clutch_capacity = 600.0f; //max transmissible torque [Nm]
-    float w_slip_eps = 20.0f;
-
-    float throttle_scale;
-    float w_peak; //engine speed of peak torque [rad/s]
-    float idle_throttle; //throttle needed to hold w_idle against drag
-
-    float engine_drag(){
-        return engine_friction*std::pow(w_engine, drag_exp);
-    }
-
-    float engine_torque(){
-        float rot = w_engine / w_redline;
-        float torque = std::max(throttle, throttle_min) * throttle_scale * rot - engine_drag();
-        return torque;
-    }
-
-    float clutch_torque(){
-        if (ratios[gear+1] == 0.0f || clutch <= 0.0f) return 0.0f;
-
-        float N = final_drive_ratio * ratios[gear+1] / wheel_radius;
-        float slip = w_engine - vl * N;
-        std::cout << slip << "\n";
-        return clutch * clutch_capacity * std::tanh(slip / w_slip_eps);
-    }
-
-    float dw_engine_dt(){
-        return (engine_torque() - clutch_torque())/I_engine;
-    }
-
-    void start_engine(){
-        w_engine = w_idle;
-        throttle_min = idle_throttle;
-    }
-
-    void kill_engine(){
-        throttle_min = 0.0;
-    }
-
-    float accel(){ //longitudonal acceleration [m/s^2]
-        float N = final_drive_ratio * ratios[gear+1];
-        float wheel_ratio = N/wheel_radius;
-        float m_eff = m + I_wheels/(wheel_radius*wheel_radius);
-
-        return clutch_torque() * wheel_ratio / m_eff;
-    }
+    driveTrain drivetrain;
 
     // TODO add braking curve
     float brake_per_wheel(){
@@ -120,7 +58,7 @@ public:
     float dvl_dt(){
         float v_sign = 0.0;
         if (std::abs(vl) > vel_eps) v_sign = vl/std::abs(vl);
-        return accel() - d*vl*std::abs(vl) - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
+        return drivetrain.accel(m, I_wheels, vl, wheel_radius) - d*vl*std::abs(vl) - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
     }
 
     std::tuple<float, float> wheel_rots(float curr_ts){
@@ -149,16 +87,16 @@ public:
         ts = steer_command;
         std::tie(tr, tl) = wheel_rots(ts);
         
-        throttle = throttle_command;
+        drivetrain.throttle = throttle_command;
         brake = brake_command;
 
-        gear = gear_command;
-        clutch = clutch_command;
+        drivetrain.gear = gear_command;
+        drivetrain.clutch = clutch_command;
     }
 
 public:
 
-    carBase(float timestep, float length, float width, float _max_torque, float mass, float drag, Eigen::Vector3f init_pos){
+    carBase(float timestep, float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
         dt = timestep;
         
         l = length;
@@ -177,19 +115,7 @@ public:
 
         com_pos = init_pos;
 
-        max_torque = _max_torque;
-
         I_wheels = 0.5f * wheel_radius*wheel_radius * m*0.01;
-        
-        //Build the torque curve from parameters
-        w_peak = w_redline / std::pow(drag_exp, 1/(drag_exp - 1));
-
-        float k = (drag_exp/(drag_exp - 1)) * max_torque / w_peak;
-        throttle_scale = k * w_redline;
-        engine_friction = k / (drag_exp * std::pow(w_peak, drag_exp - 1));
-
-        //throttle that balances drag at idle: k*throttle*w_idle = f*w_idle^n
-        idle_throttle = engine_friction * std::pow(w_idle, drag_exp - 1) / k;
     }
 
     float lag_alpha(float tau){
@@ -216,19 +142,19 @@ public:
         float str_a = lag_alpha(str_tau);
         float clt_a = lag_alpha(clt_tau);
 
-        float thr_smooth = throttle + thr_a * (throttle_command - throttle);
-        float brk_smooth = brake    + brk_a * (brake_command    - brake);
-        float str_smooth = ts       + str_a * (steer_command    - ts);
-        float clt_smooth = clutch   + clt_a * (clutch_command   - clutch);
+        float thr_smooth = drivetrain.throttle   + thr_a * (throttle_command - drivetrain.throttle);
+        float brk_smooth = brake            + brk_a * (brake_command    - brake);
+        float str_smooth = ts               + str_a * (steer_command    - ts);
+        float clt_smooth = drivetrain.clutch     + clt_a * (clutch_command   - drivetrain.clutch);
 
         update_control(thr_smooth, brk_smooth, str_smooth, gear_command, clt_smooth);
 
-        if(starter_command == 1) start_engine();
-        else if(starter_command == -1) kill_engine();
+        if(starter_command == 1) drivetrain.start_engine();
+        else if(starter_command == -1) drivetrain.kill_engine();
     }
 
     void update_state(){
-        w_engine += dt * dw_engine_dt();
+        drivetrain.w += dt * drivetrain.dw_engine_dt(vl, wheel_radius);
         vl += dt * dvl_dt();
         float vt = 0.0;
 

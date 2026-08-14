@@ -1,5 +1,5 @@
 #include "deps.hpp"
-#include "car_base.hpp"
+#include "car.hpp"
 #include "environment.hpp"
 
 double dispFPS = 60;
@@ -11,7 +11,7 @@ int main(int argc, const char* argv[]){
     int h = 500;
     int w = 1000;
 
-    carBase car = carBase(1/(dispFPS * phys_per_disp_FPS), 4.0, 1.75, 400.0f, 1500.0f, 0.0005, Eigen::Vector3f(0.0f, 0.0f, 0.0f));
+    carBase car = carBase(1/(dispFPS * phys_per_disp_FPS), 4.0, 1.75, 1500.0f, 0.0005, Eigen::Vector3f(0.0f, 0.0f, 0.0f));
     Environment scene = Environment(0.0f, 0.0f, 1.0f, 1.0f, 100.0f);
 
     float throttle = 0.0;
@@ -79,10 +79,10 @@ int main(int argc, const char* argv[]){
             EndMode3D();
             DrawFPS(10, 10);
             DrawText(TextFormat("speed: %.2f km/h", car.vl*3.6f), 10, 40, 20, WHITE);
-            DrawText(TextFormat("gear: %i", car.gear), 10, 70, 20, WHITE);
-            DrawText(TextFormat("rpm: %.0f", car.w_engine*60/(2*pi)), 10, 100, 20, WHITE);
-            DrawText(TextFormat("throttle: %.0f%%", car.throttle * 100.0f), 220, 10, 20, WHITE);
-            DrawText(TextFormat("clutch: %.0f%% engaged", car.clutch * 100.0f), 220, 40, 20, WHITE);
+            DrawText(TextFormat("gear: %i", car.drivetrain.gear), 10, 70, 20, WHITE);
+            DrawText(TextFormat("rpm: %.0f", car.drivetrain.w*60/(2*pi)), 10, 100, 20, WHITE);
+            DrawText(TextFormat("throttle: %.0f%%", car.drivetrain.throttle * 100.0f), 220, 10, 20, WHITE);
+            DrawText(TextFormat("clutch: %.0f%% engaged", car.drivetrain.clutch * 100.0f), 220, 40, 20, WHITE);
         EndDrawing();
 
         throttle = 0.0;
