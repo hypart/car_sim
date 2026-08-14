@@ -97,11 +97,21 @@ public:
         d = drag;
 
         // TODO: quick fix to shift the mesh so the axle is at the com, fix this in the kinematics later
-        std::vector<Eigen::Vector3f> body_corners = {{0.0, -w/2, 0.0}, {l, -w/2, 0.0}, {l, w/2, 0.0}, {0.0, w/2, 0.0}};
+        std::vector<Eigen::Vector3f> body_corners = {
+            {-l/2, -w/2, 0.0}, 
+            {l/2, -w/2, 0.0}, 
+            {l/2, w/2, 0.0}, 
+            {-l/2, w/2, 0.0}};
         std::vector<std::tuple<uint, uint>> body_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
 
-        std::vector<Eigen::Vector3f> wheel_corners = {{-l/10, -l/20, 0.0}, {l/10, -l/20, 0.0}, {l/10, l/20, 0.0}, {-l/10, l/20, 0.0}};
-        std::vector<std::tuple<uint, uint>> wheel_conn = body_conn;
+        std::vector<Eigen::Vector3f> wheel_corners = {
+            {-l/10, -l/20, 0.0}, 
+            {l/10, -l/20, 0.0}, 
+            {l/10, l/20, 0.0}, 
+            {-l/10, l/20, 0.0},
+            {0.0, 1000.0, 0.0},
+            {0.0, -1000.0, 0.0}};
+        std::vector<std::tuple<uint, uint>> wheel_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}};
 
         bodymesh = wireMesh(body_corners, body_conn);
         wheelmesh = wireMesh(wheel_corners, wheel_conn);
@@ -134,20 +144,23 @@ public:
 
     void update_state(float dt){
         vl += dt * dvl_dt();
+        float vt = 0.0;
 
         if(std::abs(ts) > steer_eps){
             float rn = l/tan(ts);
-            tc += vl/rn * dt;
+            float dtc = vl/rn;
+            tc += dtc * dt;
+            vt = dtc * l/2;
         }
 
         com_pos += Eigen::Vector3f(
-            vl * std::cos(tc),
-            vl * std::sin(tc),
+            vl * std::cos(tc) - vt * std::sin(tc),
+            vl * std::sin(tc) + vt * std::cos(tc),
             0.0
         )* dt;
     }
 
-    void draw(float zoom){
+    void draw(){
 
         std::vector<Eigen::Vector3f> body_corners;
 
@@ -163,7 +176,7 @@ public:
 
             body_corners.push_back(start);
 
-            DrawLine(start.x()*zoom, start.y()*zoom, end.x()*zoom, end.y()*zoom, WHITE);
+            DrawLine3D((Vector3){start.x(), 0.0f, start.y()}, (Vector3){end.x(), 0.0f, end.y()}, GREEN);
         }
 
         //wheels
@@ -182,7 +195,7 @@ public:
                 start = p + Eigen::AngleAxisf(rot, axis) * start;
                 end = p + Eigen::AngleAxisf(rot, axis) * end;
 
-                DrawLine(start.x()*zoom, start.y()*zoom, end.x()*zoom, end.y()*zoom, WHITE);
+                DrawLine3D((Vector3){start.x(), 0.0f, start.y()}, (Vector3){end.x(), 0.0f, end.y()}, GREEN);
             }
             wheel_idx++;
         }

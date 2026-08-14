@@ -1,5 +1,6 @@
 #include "deps.hpp"
 #include "car_base.hpp"
+#include "environment.hpp"
 
 double dispFPS = 60;
 uint phys_per_disp_FPS = 10; //physics frames per displayed frame
@@ -11,6 +12,7 @@ int main(int argc, const char* argv[]){
     int w = 1000;
 
     carBase car = carBase(2.0, 1.0, 1.0, 0.01, Eigen::Vector3f(1.0f, 1.0f, 0.0f));
+    Environment scene(0.0f, 5.0f, 1.0f, 1.0f, 100.0f);
 
     float throttle = 0.0;
     float steer = 0.0;
@@ -37,7 +39,12 @@ int main(int argc, const char* argv[]){
         if(!(frame_count % phys_per_disp_FPS)){
             BeginDrawing();
                 ClearBackground(BLACK);
-                car.draw(dist_scale);
+                BeginMode3D(scene.camera);
+                    Eigen::Vector3f car_dir = {std::cos(car.tc), std::sin(car.tc), 0.0f};
+                    scene.draw(car.com_pos, car_dir, 4.0f, pi/16);
+                    car.draw();
+                    //DrawSphere((Vector3){car.com_pos.x(), car.com_pos.z(), car.com_pos.y()}, 0.5f, WHITE);
+                EndMode3D();
             EndDrawing();
         }
 
