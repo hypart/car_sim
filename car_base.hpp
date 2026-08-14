@@ -1,8 +1,8 @@
 #include "deps.hpp"
 
 constexpr float pi =  3.14159265358979323846f;
-constexpr float steer_eps = 1e-6;
-constexpr float vel_eps = 1e-6;
+constexpr float steer_eps = 1e-10;
+constexpr float vel_eps = 1e-10;
 
 struct wireMesh{
 
@@ -26,39 +26,101 @@ public:
 
     float dt; //physics time step
 
-    wireMesh bodymesh;
-    wireMesh wheelmesh;
+    std::vector<Eigen::Vector3f> wheel_positions;
+    float wheel_width;
+    float wheel_radius;
 
     Eigen::Vector3f com_pos; //position of the center of mass [m]
-    float tc; //rotation of chassis with respect to global x axis [rad]
+    float tc = 0.0f; //rotation of chassis with respect to global x axis [rad]
 
-    float vl; //longitudonal velocity component of chassis CoM [m/s]
-    float ts; //steer control rotation, at the center of the front axle
-    float tr; //rotation of right tire with respect to longitudonal chassis axis [rad]
-    float tl; //rotation of left tire with respect to longitudonal chassis axis [rad]
+    float vl = 0.0f; //longitudonal velocity component of chassis CoM [m/s]
+    float ts = 0.0f; //steer control rotation, at the center of the front axle
+    float tr = 0.0f; //rotation of right tire with respect to longitudonal chassis axis [rad]
+    float tl = 0.0f; //rotation of left tire with respect to longitudonal chassis axis [rad]
+
+    float w_engine = 0.0f; //rotational velocity of engine [rad/s]
 
     float w; //wheelbase width
     float l; //wheelbase length
     float m; //car mass
     float d; //drag coefficient
 
-    float throttle; //throttle command
-    float brake; //braking command
+    float max_torque;
 
-    // TODO add power curve
+    float throttle = 0.0f; //throttle command
+    float throttle_min = 0.0f;
+    float brake = 0.0f; //braking command
+
+    float clutch = 0.0f; //0 disengaged 1 fully engaged
+    int gear = 0;
+    std::vector<float> ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
+    float final_drive_ratio = 4.0;
+
+    float I_engine = 0.25f;
+    float I_wheels;
+
+    float engine_friction; //derived in the constructor from max_torque and w_peak
+    float drag_exp = 3.0;
+
+    float w_idle = 90.0f;
+    float w_redline = 700.0f;
+
+    float clutch_capacity = 600.0f; //max transmissible torque [Nm]
+    float w_slip_eps = 20.0f;
+
+    float throttle_scale;
+    float w_peak; //engine speed of peak torque [rad/s]
+    float idle_throttle; //throttle needed to hold w_idle against drag
+
+    float engine_drag(){
+        return engine_friction*std::pow(w_engine, drag_exp);
+    }
+
+    float engine_torque(){
+        float rot = w_engine / w_redline;
+        float torque = std::max(throttle, throttle_min) * throttle_scale * rot - engine_drag();
+        return torque;
+    }
+
+    float clutch_torque(){
+        if (ratios[gear+1] == 0.0f || clutch <= 0.0f) return 0.0f;
+
+        float N = final_drive_ratio * ratios[gear+1] / wheel_radius;
+        float slip = w_engine - vl * N;
+        std::cout << slip << "\n";
+        return clutch * clutch_capacity * std::tanh(slip / w_slip_eps);
+    }
+
+    float dw_engine_dt(){
+        return (engine_torque() - clutch_torque())/I_engine;
+    }
+
+    void start_engine(){
+        w_engine = w_idle;
+        throttle_min = idle_throttle;
+    }
+
+    void kill_engine(){
+        throttle_min = 0.0;
+    }
+
     float accel(){ //longitudonal acceleration [m/s^2]
-        return throttle;
+        float N = final_drive_ratio * ratios[gear+1];
+        float wheel_ratio = N/wheel_radius;
+        float m_eff = m + I_wheels/(wheel_radius*wheel_radius);
+
+        return clutch_torque() * wheel_ratio / m_eff;
     }
 
     // TODO add braking curve
     float brake_per_wheel(){
-        return brake/4;
+        return brake*10.0f/4.0f;
     }
 
     float dvl_dt(){
         float v_sign = 0.0;
         if (std::abs(vl) > vel_eps) v_sign = vl/std::abs(vl);
-        return accel()/m - d*vl - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
+        return accel() - d*vl*std::abs(vl) - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
     }
 
     std::tuple<float, float> wheel_rots(float curr_ts){
@@ -83,17 +145,20 @@ public:
         return {tr, tl};
     }
 
-    void update_control(float throttle_command, float brake_command, float steer_command){
+    void update_control(float throttle_command, float brake_command, float steer_command, int gear_command, float clutch_command){
         ts = steer_command;
         std::tie(tr, tl) = wheel_rots(ts);
         
         throttle = throttle_command;
         brake = brake_command;
+
+        gear = gear_command;
+        clutch = clutch_command;
     }
 
 public:
 
-    carBase(float timestep, float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
+    carBase(float timestep, float length, float width, float _max_torque, float mass, float drag, Eigen::Vector3f init_pos){
         dt = timestep;
         
         l = length;
@@ -101,36 +166,30 @@ public:
         m = mass;
         d = drag;
 
-        // TODO: quick fix to shift the mesh so the axle is at the com, fix this in the kinematics later
-        std::vector<Eigen::Vector3f> body_corners = {
-            {-l/2, -w/2, 0.0}, 
-            {l/2, -w/2, 0.0}, 
-            {l/2, w/2, 0.0}, 
-            {-l/2, w/2, 0.0}};
-        std::vector<std::tuple<uint, uint>> body_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
+        wheel_positions = {
+            {l/2, w/2, 0.0}, // front right
+            {l/2, -w/2, 0.0}, // front left
+            {-l/2, w/2, 0.0}, // back right
+            {-l/2, -w/2, 0.0}}; // back left
 
-        std::vector<Eigen::Vector3f> wheel_corners = {
-            {-l/10, -l/20, 0.0}, 
-            {l/10, -l/20, 0.0}, 
-            {l/10, l/20, 0.0}, 
-            {-l/10, l/20, 0.0},
-            {0.0, 1000.0, 0.0},
-            {0.0, -1000.0, 0.0}};
-        std::vector<std::tuple<uint, uint>> wheel_conn = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}};
-
-        bodymesh = wireMesh(body_corners, body_conn);
-        wheelmesh = wireMesh(wheel_corners, wheel_conn);
+        wheel_width = l/10;
+        wheel_radius = l/10;
 
         com_pos = init_pos;
-        tc = 0.0;
 
-        vl = 0.0;
-        ts = 0.0;
-        tr = 0.0;
-        tl = 0.0;
+        max_torque = _max_torque;
 
-        throttle = 0.0;
-        brake = 0.0;
+        I_wheels = 0.5f * wheel_radius*wheel_radius * m*0.01;
+        
+        //Build the torque curve from parameters
+        w_peak = w_redline / std::pow(drag_exp, 1/(drag_exp - 1));
+
+        float k = (drag_exp/(drag_exp - 1)) * max_torque / w_peak;
+        throttle_scale = k * w_redline;
+        engine_friction = k / (drag_exp * std::pow(w_peak, drag_exp - 1));
+
+        //throttle that balances drag at idle: k*throttle*w_idle = f*w_idle^n
+        idle_throttle = engine_friction * std::pow(w_idle, drag_exp - 1) / k;
     }
 
     float lag_alpha(float tau){
@@ -138,25 +197,38 @@ public:
         return 1.0f - std::exp(-dt/tau);
     }
 
-    void input_control(float throttle_command, float brake_command, float steer_command){
+    void input_control(
+        float throttle_command, 
+        float brake_command, 
+        float steer_command, 
+        int gear_command, 
+        float clutch_command,
+        int starter_command){
 
         //time constants [s] (0: immediate reaction)
         float thr_tau = 0.0f;
-        float str_tau = 0.75f;
-        float brk_tau = 0.75f;
+        float str_tau = 0.5f;
+        float brk_tau = 0.1f;
+        float clt_tau = 0.1f;
 
         float thr_a = lag_alpha(thr_tau);
         float brk_a = lag_alpha(brk_tau);
         float str_a = lag_alpha(str_tau);
+        float clt_a = lag_alpha(clt_tau);
 
         float thr_smooth = throttle + thr_a * (throttle_command - throttle);
         float brk_smooth = brake    + brk_a * (brake_command    - brake);
         float str_smooth = ts       + str_a * (steer_command    - ts);
+        float clt_smooth = clutch   + clt_a * (clutch_command   - clutch);
 
-        update_control(thr_smooth, brk_smooth, str_smooth);
+        update_control(thr_smooth, brk_smooth, str_smooth, gear_command, clt_smooth);
+
+        if(starter_command == 1) start_engine();
+        else if(starter_command == -1) kill_engine();
     }
 
     void update_state(){
+        w_engine += dt * dw_engine_dt();
         vl += dt * dvl_dt();
         float vt = 0.0;
 
@@ -176,41 +248,26 @@ public:
 
     void draw(){
 
-        std::vector<Eigen::Vector3f> body_corners;
-
-        //body
-        for(std::tuple<uint, uint> idcs : bodymesh.connectivity){
-            Eigen::Vector3f start = bodymesh.vertices[std::get<0>(idcs)];
-            Eigen::Vector3f end = bodymesh.vertices[std::get<1>(idcs)];
-
-            Eigen::Vector3f axis(0.0f, 0.0f, 1.0f);
-
-            start = com_pos + Eigen::AngleAxisf(tc, axis) * start;
-            end = com_pos + Eigen::AngleAxisf(tc, axis) * end;
-
-            body_corners.push_back(start);
-
-            DrawLine3D((Vector3){start.x(), 0.0f, start.y()}, (Vector3){end.x(), 0.0f, end.y()}, GREEN);
-        }
-
         //wheels
         int wheel_idx = 0;
-        for(Eigen::Vector3f p : body_corners){
-            for(std::tuple<uint, uint> idcs : wheelmesh.connectivity){
-                Eigen::Vector3f start = wheelmesh.vertices[std::get<0>(idcs)];
-                Eigen::Vector3f end = wheelmesh.vertices[std::get<1>(idcs)];
+        for(Eigen::Vector3f p : wheel_positions){
 
-                float rot = tc;
-                if (wheel_idx == 1) rot += tr;
-                if (wheel_idx == 2) rot += tl;
+            Eigen::Vector3f start(0.0f, -wheel_width/2, 0.0f);
+            Eigen::Vector3f end(0.0, wheel_width/2, 0.0f);
 
-                Eigen::Vector3f axis(0.0f, 0.0f, 1.0f);
+            float angle_base = tc;
+            float angle_wheel = 0.0f;
+            if (wheel_idx == 0) angle_wheel = tr;
+            if (wheel_idx == 1) angle_wheel = tl;
+            Eigen::Vector3f axis(0.0f, 0.0f, 1.0f);
 
-                start = p + Eigen::AngleAxisf(rot, axis) * start;
-                end = p + Eigen::AngleAxisf(rot, axis) * end;
+            Eigen::Vector3f start_trans = com_pos + Eigen::AngleAxisf(angle_base, axis) * (p + Eigen::AngleAxisf(angle_wheel, axis) * start);
+            Eigen::Vector3f end_trans = com_pos + Eigen::AngleAxisf(angle_base, axis) * (p + Eigen::AngleAxisf(angle_wheel, axis) * end);
+            
+            Vector3 start_v = {start_trans.x(), start_trans.z(), start_trans.y()};
+            Vector3 end_v = {end_trans.x(), end_trans.z(), end_trans.y()};
 
-                DrawLine3D((Vector3){start.x(), 0.0f, start.y()}, (Vector3){end.x(), 0.0f, end.y()}, GREEN);
-            }
+            DrawCylinderWiresEx(start_v, end_v, wheel_radius, wheel_radius, 100, WHITE);
             wheel_idx++;
         }
     }
