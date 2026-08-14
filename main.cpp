@@ -11,7 +11,7 @@ int main(int argc, const char* argv[]){
     int h = 500;
     int w = 1000;
 
-    carBase car = carBase(2.0, 1.0, 1.0, 0.01, Eigen::Vector3f(1.0f, 1.0f, 0.0f));
+    carBase car = carBase(1/(dispFPS * phys_per_disp_FPS), 2.0, 1.0, 1.0, 0.01, Eigen::Vector3f(1.0f, 1.0f, 0.0f));
     Environment scene(0.0f, 5.0f, 1.0f, 1.0f, 100.0f);
 
     float throttle = 0.0;
@@ -33,7 +33,7 @@ int main(int argc, const char* argv[]){
 
         for(int i = 0; i < phys_per_disp_FPS; i++){
             car.input_control(throttle, brake, steer);
-            car.update_state(1/(dispFPS * phys_per_disp_FPS));
+            car.update_state();
         }
 
         if(!(frame_count % phys_per_disp_FPS)){

@@ -23,6 +23,9 @@ struct wireMesh{
 
 class carBase{
 public:
+
+    float dt; //physics time step
+
     wireMesh bodymesh;
     wireMesh wheelmesh;
 
@@ -90,7 +93,9 @@ public:
 
 public:
 
-    carBase(float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
+    carBase(float timestep, float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
+        dt = timestep;
+        
         l = length;
         w = width;
         m = mass;
@@ -128,21 +133,30 @@ public:
         brake = 0.0;
     }
 
+    float lag_alpha(float tau){
+        if(tau <= 0.0f) return 1.0f; //immediate reaction
+        return 1.0f - std::exp(-dt/tau);
+    }
+
     void input_control(float throttle_command, float brake_command, float steer_command){
 
-        //between 0 and 1 (0: immediate reaction)
-        float thr_delay = 0.0;
-        float str_delay = 0.999;
-        float brk_delay = 0.999;
+        //time constants [s] (0: immediate reaction)
+        float thr_tau = 0.0f;
+        float str_tau = 0.75f;
+        float brk_tau = 0.75f;
 
-        float thr_smooth = throttle_command * (1-thr_delay) + throttle * thr_delay;
-        float brk_smooth = brake_command * (1-brk_delay) + brake * brk_delay;
-        float str_smooth = steer_command * (1-str_delay) + ts * str_delay;
-        
+        float thr_a = lag_alpha(thr_tau);
+        float brk_a = lag_alpha(brk_tau);
+        float str_a = lag_alpha(str_tau);
+
+        float thr_smooth = throttle + thr_a * (throttle_command - throttle);
+        float brk_smooth = brake    + brk_a * (brake_command    - brake);
+        float str_smooth = ts       + str_a * (steer_command    - ts);
+
         update_control(thr_smooth, brk_smooth, str_smooth);
     }
 
-    void update_state(float dt){
+    void update_state(){
         vl += dt * dvl_dt();
         float vt = 0.0;
 
