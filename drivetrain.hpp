@@ -6,15 +6,13 @@ struct driveTrain{
     float clutch = 0.0f; //0 disengaged 1 fully engaged
     int gear = 0;
 
-    float max_torque;
     float throttle_min = 0.0f;
-    float idle_throttle = 0.09f; //throttle needed to hold w_idle against drag
+    float idle_throttle = 0.08f; // minimum throttle needed to idle
+    float throttle_resp = 0.8f; // how responsive freewheel rpm are to throttle input
 
     float w = 0.0f; //rotational velocity of engine [rad/s]
-    float w_max = 750.0f;
-    float w_peak = 524.0f;
-    float t_peak = 440.0f;
-    float w_idle = 10.0f;
+    float w_peak = 400.0f;
+    float torque_peak = 450.0f;
 
     std::vector<float> ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
     float final_drive_ratio = 4.0;
@@ -25,9 +23,6 @@ struct driveTrain{
     float w_slip_eps = 20.0f;
 
     driveTrain(){
-
-        max_torque = 400.0f;
-
         ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
         final_drive_ratio = 4.0;
 
@@ -36,14 +31,17 @@ struct driveTrain{
         clutch_capacity = 600.0f; //max transmissible torque [Nm]
         w_slip_eps = 20.0f;
     }
-    // TODO: find better torque curve (maybe from dataset)
+    
     float engine_torque(){
-        const double x  = w / w_max;
-        const double xp = w_peak / w_max;
-        const double d  = (x - xp) / (1.0 - xp);
-        const double shape = 1.0 - 0.2 * d * d;
-        const double drag  = 0.15 * t_peak * (0.25 + 0.75 * x * x);
-        return std::max(throttle, throttle_min) * t_peak * shape - drag * std::tanh(w / 5.0);
+        const double thr_command = std::max(throttle, throttle_min);
+        const double t_s = throttle_resp * thr_command + 1 - throttle_resp;
+
+        const double b = 2.0 * torque_peak / std::pow(w_peak, 3);
+        const double c = -3.0 * torque_peak / std::pow(w_peak, 2);
+        const double d = c*c / (4*b*(1-idle_throttle));
+
+        const double w_t = std::clamp(w / t_s, 0.0, 1.5*w_peak);
+        return -b*std::pow(w_t, 3) - c*std::pow(w_t, 2) + (thr_command - 1)*d*w_t;
     }
 
     float clutch_torque(float car_speed, float wheel_radius){
@@ -59,8 +57,9 @@ struct driveTrain{
     }
 
     void start_engine(){
-        w = w_idle;
-        throttle_min = idle_throttle;
+        // start at 1.1 * idle rpm
+        w = 1.1 * 0.75 * w_peak * (throttle_resp * std::max(throttle, throttle_min) + 1 - throttle_resp);
+        throttle_min = 1.01*idle_throttle;
     }
 
     void kill_engine(){

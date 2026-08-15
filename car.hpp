@@ -132,7 +132,7 @@ public:
         int starter_command){
 
         //time constants [s] (0: immediate reaction)
-        float thr_tau = 0.0f;
+        float thr_tau = 0.1f;
         float str_tau = 0.5f;
         float brk_tau = 0.1f;
         float clt_tau = 0.1f;
