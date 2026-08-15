@@ -36,6 +36,7 @@ struct driveTrain{
         return -b*std::pow(w_t, 3) - c*std::pow(w_t, 2) + (thr_command - 1)*d*w_t;
     }
 
+    // TODO add clutch lockup functionality
     float clutch_torque(float car_speed, float wheel_radius){
         if (ratios[gear+1] == 0.0f || clutch <= 0.0f) return 0.0f;
 

@@ -11,7 +11,7 @@ int main(int argc, const char* argv[]){
     int h = 500;
     int w = 1000;
 
-    carBase car = carBase(1/(dispFPS * phys_per_disp_FPS), 4.0, 1.75, 1500.0f, 0.0005, Eigen::Vector3f(0.0f, 0.0f, 0.0f));
+    carBase car = carBase(1/(dispFPS * phys_per_disp_FPS), dispFPS, 4.0, 1.75, 1500.0f, 0.0005, Eigen::Vector3f(0.0f, 0.0f, 0.0f));
     Environment scene = Environment(0.0f, 0.0f, 1.0f, 1.0f, 100.0f);
 
     float throttle = 0.0;
@@ -19,7 +19,13 @@ int main(int argc, const char* argv[]){
     float brake = 0.0;
 
     InitWindow(w, h, "car");
-    SetTargetFPS(dispFPS);
+
+    InitAudioDevice();
+    SetAudioStreamBufferSizeDefault(car.sound.BUFFER_SIZE);
+    AudioStream stream = LoadAudioStream(car.sound.SAMPLE_RATE, 16, 1);
+    PlayAudioStream(stream);
+
+    short buffer[car.sound.BUFFER_SIZE];
 
     uint frame_count = 0;
     float dist_scale = 50.0;
@@ -38,6 +44,7 @@ int main(int argc, const char* argv[]){
     int clutch_state = -1;
     int gear_state = 0;
 
+    SetTargetFPS(dispFPS);
     while(!WindowShouldClose()){
 
         if(IsKeyDown(KEY_W)) throttle = 1.0;
@@ -70,6 +77,15 @@ int main(int argc, const char* argv[]){
             car.update_state();
         }
 
+        if (IsAudioStreamProcessed(stream))
+        {
+            for (int i = 0; i < car.sound.BUFFER_SIZE; ++i)
+            {
+                buffer[i] = car.play_sound();
+            }
+            UpdateAudioStream(stream, buffer, car.sound.BUFFER_SIZE);
+        }
+
         BeginDrawing();
             ClearBackground(BLACK);
             BeginMode3D(scene.camera);
@@ -91,6 +107,8 @@ int main(int argc, const char* argv[]){
         
         frame_count++;
     }
+    UnloadAudioStream(stream);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }

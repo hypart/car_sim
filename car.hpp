@@ -1,5 +1,6 @@
 #include "deps.hpp"
 #include "drivetrain.hpp"
+#include "sounds.hpp"
 
 constexpr float steer_eps = 1e-10;
 constexpr float vel_eps = 1e-10;
@@ -48,6 +49,7 @@ public:
     float brake = 0.0f; //braking command
 
     driveTrain drivetrain;
+    carSoundEmitter sound;
 
     // TODO add braking curve
     float brake_per_wheel(){
@@ -101,9 +103,14 @@ public:
         return drivetrain.clutch_torque(vl, wheel_radius) * wheel_ratio / m_eff;
     }
 
+    float lag_alpha(float tau){
+        if(tau <= 0.0f) return 1.0f; //immediate reaction
+        return 1.0f - std::exp(-dt/tau);
+    }
+
 public:
 
-    carBase(float timestep, float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
+    carBase(float timestep, float disp_fps, float length, float width, float mass, float drag, Eigen::Vector3f init_pos){
         dt = timestep;
         
         l = length;
@@ -123,11 +130,8 @@ public:
         com_pos = init_pos;
 
         I_wheels = 0.5f * wheel_radius*wheel_radius * m*0.01;
-    }
 
-    float lag_alpha(float tau){
-        if(tau <= 0.0f) return 1.0f; //immediate reaction
-        return 1.0f - std::exp(-dt/tau);
+        sound = carSoundEmitter(44100, disp_fps);
     }
 
     void input_control(
@@ -203,5 +207,9 @@ public:
             DrawCylinderWiresEx(start_v, end_v, wheel_radius, wheel_radius, 100, WHITE);
             wheel_idx++;
         }
+    }
+
+    short play_sound(){
+        return sound.emit(drivetrain.throttle, drivetrain.w);
     }
 };

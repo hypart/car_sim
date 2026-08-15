@@ -9,6 +9,7 @@
 #include <tuple>
 #include <iostream>
 #include <string>
+#include <random>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <raylib.h>
