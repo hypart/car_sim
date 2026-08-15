@@ -16,21 +16,13 @@ struct driveTrain{
 
     std::vector<float> ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
     float final_drive_ratio = 4.0;
+    int max_gear = 5;
+    int min_gear = -1;
 
     float I_engine = 0.25f;
 
     float clutch_capacity = 600.0f; //max transmissible torque [Nm]
     float w_slip_eps = 20.0f;
-
-    driveTrain(){
-        ratios = {-4.0f, 0.0f, 4.0f, 2.5f, 1.5f, 1.0f, 0.75f};
-        final_drive_ratio = 4.0;
-
-        I_engine = 0.25f;
-
-        clutch_capacity = 600.0f; //max transmissible torque [Nm]
-        w_slip_eps = 20.0f;
-    }
     
     float engine_torque(){
         const double thr_command = std::max(throttle, throttle_min);
@@ -40,7 +32,7 @@ struct driveTrain{
         const double c = -3.0 * torque_peak / std::pow(w_peak, 2);
         const double d = c*c / (4*b*(1-idle_throttle));
 
-        const double w_t = std::clamp(w / t_s, 0.0, 1.5*w_peak);
+        const double w_t = std::clamp(w / t_s, -1.5*w_peak, 5.0*w_peak);
         return -b*std::pow(w_t, 3) - c*std::pow(w_t, 2) + (thr_command - 1)*d*w_t;
     }
 
@@ -66,11 +58,34 @@ struct driveTrain{
         throttle_min = 0.0;
     }
 
-    float accel(float car_mass, float I_wheels, float car_speed, float wheel_radius){ //longitudonal acceleration [m/s^2]
-        float N = final_drive_ratio * ratios[gear+1];
-        float wheel_ratio = N/wheel_radius;
-        float m_eff = car_mass + I_wheels/(wheel_radius*wheel_radius);
+    void configure_engine(
+        float _peak_torque, // maximum torque [Nm]
+        float _peak_rpm, // rpm at max torque [min^-1]
+        float _idle_throttle, // throttle needed to idle [0.0-1.0]
+        float _throttle_response, // how responsive the freewheel rpm should be to throttle [0.0-1.0]
+        float _inertia_engine // inertia of the engine [Nm^2]
+    ){
+        idle_throttle = _idle_throttle;
+        throttle_resp = _throttle_response;
+        w_peak = _peak_rpm / 60 * 2*pi;
+        torque_peak = _peak_torque;
+        I_engine = _inertia_engine;
+    }
 
-        return clutch_torque(car_speed, wheel_radius) * wheel_ratio / m_eff;
+    void configure_transmission(
+        std::vector<float> _gear_ratios,
+        int _neutral_gear_idx,
+        float _final_drive_ratio,
+        float _clutch_max_torque,
+        float _clutch_slip_transition
+    ){
+
+        ratios = _gear_ratios;
+        final_drive_ratio = _final_drive_ratio;
+        max_gear = ratios.size() - 1 - _neutral_gear_idx;
+        min_gear = - _neutral_gear_idx;
+
+        clutch_capacity = _clutch_max_torque;
+        w_slip_eps = _clutch_slip_transition;
     }
 };

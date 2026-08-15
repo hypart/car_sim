@@ -12,3 +12,5 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <raylib.h>
+
+constexpr float pi =  3.14159265358979323846f;

@@ -45,16 +45,16 @@ int main(int argc, const char* argv[]){
         if(IsKeyDown(KEY_D)) steer = 1.0;
         if(IsKeyDown(KEY_S)) brake = 1.0;
 
-        if(IsKeyDown(KEY_DOWN)) cam_pitch -= 1.0*std::abs(cam_pitch_lim + cam_pitch) / dispFPS;
-        else if(IsKeyDown(KEY_UP)) cam_pitch += 1.0*std::abs(cam_pitch_lim - cam_pitch) / dispFPS;
+        if(IsKeyDown(KEY_DOWN)) cam_pitch -= 2.0*std::abs(cam_pitch_lim + cam_pitch) / dispFPS;
+        else if(IsKeyDown(KEY_UP)) cam_pitch += 2.0*std::abs(cam_pitch_lim - cam_pitch) / dispFPS;
         else cam_pitch += cam_alpha * (cam_pitch_default - cam_pitch);
 
-        if(IsKeyDown(KEY_RIGHT)) cam_yaw -= 1.0*std::abs(cam_yaw_lim + cam_yaw) / dispFPS;
-        else if(IsKeyDown(KEY_LEFT)) cam_yaw += 1.0*std::abs(cam_yaw_lim - cam_yaw) / dispFPS;
+        if(IsKeyDown(KEY_RIGHT)) cam_yaw -= 2.0*std::abs(cam_yaw_lim + cam_yaw) / dispFPS;
+        else if(IsKeyDown(KEY_LEFT)) cam_yaw += 2.0*std::abs(cam_yaw_lim - cam_yaw) / dispFPS;
         else cam_yaw += cam_alpha * (cam_yaw_default - cam_yaw);
 
-        if(IsKeyReleased(KEY_E)) gear_state = std::min(gear_state+1, 5);
-        if(IsKeyReleased(KEY_Q)) gear_state = std::max(gear_state-1, -1);
+        if(IsKeyReleased(KEY_E)) gear_state = std::min(gear_state+1, car.drivetrain.max_gear);
+        if(IsKeyReleased(KEY_Q)) gear_state = std::max(gear_state-1, car.drivetrain.min_gear);
 
         if(IsKeyReleased(KEY_C)) clutch_state *= -1;
 

@@ -1,7 +1,6 @@
 #include "deps.hpp"
 #include "drivetrain.hpp"
 
-constexpr float pi =  3.14159265358979323846f;
 constexpr float steer_eps = 1e-10;
 constexpr float vel_eps = 1e-10;
 
@@ -58,7 +57,7 @@ public:
     float dvl_dt(){
         float v_sign = 0.0;
         if (std::abs(vl) > vel_eps) v_sign = vl/std::abs(vl);
-        return drivetrain.accel(m, I_wheels, vl, wheel_radius) - d*vl*std::abs(vl) - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
+        return accel() - d*vl*std::abs(vl) - v_sign*brake_per_wheel()*(2 + std::cos(tr) + std::cos(tl));
     }
 
     std::tuple<float, float> wheel_rots(float curr_ts){
@@ -92,6 +91,14 @@ public:
 
         drivetrain.gear = gear_command;
         drivetrain.clutch = clutch_command;
+    }
+
+    float accel(){ //longitudonal acceleration [m/s^2]
+        float N = drivetrain.final_drive_ratio * drivetrain.ratios[drivetrain.gear+1];
+        float wheel_ratio = N/wheel_radius;
+        float m_eff = m + I_wheels/(wheel_radius*wheel_radius);
+
+        return drivetrain.clutch_torque(vl, wheel_radius) * wheel_ratio / m_eff;
     }
 
 public:
