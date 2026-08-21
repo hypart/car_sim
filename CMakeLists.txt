@@ -23,5 +23,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(eigen)
 
-add_executable(car main.cpp)
+add_executable(car
+    main.cpp
+    car.cpp
+    drivetrain.cpp
+    environment.cpp
+    sounds.cpp
+)
 target_link_libraries(car PRIVATE raylib Eigen3::Eigen)
