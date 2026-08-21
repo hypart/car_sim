@@ -28,9 +28,6 @@ struct twoPole {
   float b0 = 0.0f, a1 = 0.0f, a2 = 0.0f;
   float amp = 1.0f;
 
-  ///@param amp_factor volume amplification factor
-  ///@param freq_hz resonant frequency in Hertz
-  ///@param t60_ms time to decay by 60 decibels, in miliseconds
   void set(float amp_factor, float freq_hz, float t60_ms, int sample_rate) {
     float r = std::exp(-6.9078f / (sample_rate * t60_ms / 1000.0f));
     float theta = 2.0f * pi * freq_hz / sample_rate;
