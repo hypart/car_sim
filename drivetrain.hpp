@@ -67,16 +67,13 @@ struct driveTrain {
   }
 
   float dw_engine_dt(float car_speed, float wheel_radius, float dt) {
-    // locked up clutch
+
     update_clutch_lock_state(car_speed, wheel_radius);
+
     float N = final_drive_ratio * ratios[gear + 1] / wheel_radius;
-    float slip = w - car_speed * N;
-    if (clutch_locked) {
-      std::cout << w << " locked\n";
+    if (clutch_locked)
       return (car_speed * N - w) / dt;
-    }
-    // slipping clutch
-    std::cout << slip << "\n";
+
     return (engine_torque() - clutch_torque(car_speed, wheel_radius)) /
            I_engine;
   }

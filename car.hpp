@@ -110,7 +110,6 @@ public:
 
     float torque =
         drivetrain.clutch_torque(vl, wheel_radius) * wheel_ratio / m_eff;
-    std::cout << torque << "\n";
     return torque;
   }
 
