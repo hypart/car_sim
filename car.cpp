@@ -16,8 +16,47 @@ float carBase::brake_force() {
     return brake_per_wheel() * (2 + std::cos(tr) + std::cos(tl));
 }
 
+Eigen::Vector2f carBase::wheel_lat_force(float angle) {
+    float MAX_FORCE = 10.0f;
+    Eigen::Vector2f car_vel = {vl, vt};
+    Eigen::Vector2f wheel_dir = {std::cos(angle), std::sin(angle)};
+
+    float alignment = car_vel.normalized().dot(wheel_dir);
+
+    // TODO: actual slip equation goes here
+    float force_mag = (1.0f - std::abs(alignment)) * MAX_FORCE * car_vel.norm() / 10.0f;
+
+    if (angle >= 0.0f)
+        return force_mag * Eigen::Vector2f(-std::sin(angle), std::cos(angle));
+    else
+        return force_mag * Eigen::Vector2f(std::sin(angle), -std::cos(angle));
+}
+
 float carBase::dvl_dt() {
     return accel() - drag_force() - brake_force();
+}
+
+float carBase::dvt_dt() {
+    float fr = wheel_lat_force(tr).y();
+    float fl = wheel_lat_force(tl).y();
+    float r = wheel_lat_force(0.0f).y();
+
+    return (fr + fl + 2 * r) / m;
+}
+
+float carBase::dtc_dt() {
+    Eigen::Vector2f fr2 = wheel_lat_force(tr);
+    Eigen::Vector2f fl2 = wheel_lat_force(tl);
+    Eigen::Vector2f r2 = wheel_lat_force(0.0f);
+
+    Eigen::Vector3f fr3 = {fr2.x(), fr2.y(), 0.0f};
+    Eigen::Vector3f fl3 = {fl2.x(), fl2.y(), 0.0f};
+    Eigen::Vector3f r3 = {r2.x(), r2.y(), 0.0f};
+
+    Eigen::Vector3f rfr = {l / 2.0f, w / 2.0f, 0.0f};
+    Eigen::Vector3f rfl = {l / 2.0f, -w / 2.0f, 0.0f};
+
+    return (rfr.cross(fr3).z() + rfl.cross(fl3).z() + 2 * r3.y() * l / 2) / 1.0f;
 }
 
 std::tuple<float, float> carBase::wheel_rots(float curr_ts) {
@@ -123,15 +162,8 @@ void carBase::input_control(float throttle_command, float brake_command, float s
 void carBase::update_state() {
     drivetrain.w += dt * drivetrain.dw_engine_dt(vl, wheel_radius, dt);
     vl += dt * dvl_dt();
-    float vt = 0.0;
-
-    if (std::abs(ts) > steer_eps) {
-        float rn = l / tan(ts);
-        float dtc = vl / rn;
-        tc += dtc * dt;
-        vt = dtc * l / 2;
-    }
-
+    vt += dt * dvt_dt();
+    tc += dt * dtc_dt();
     com_pos += Eigen::Vector3f(vl * std::cos(tc) - vt * std::sin(tc),
                                vl * std::sin(tc) + vt * std::cos(tc), 0.0) *
                dt;

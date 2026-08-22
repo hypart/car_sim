@@ -35,6 +35,7 @@ class carBase {
     float tc = 0.0f;         // rotation of chassis with respect to global x axis [rad]
 
     float vl = 0.0f; // longitudonal velocity component of chassis CoM [m/s]
+    float vt = 0.0f; // transverse velocity component of chassis CoM [m/s]
     float ts = 0.0f; // steer control rotation, at the center of the front axle
     float tr = 0.0f; // rotation of right tire with respect to longitudonal
                      // chassis axis [rad]
@@ -60,7 +61,11 @@ class carBase {
 
     float brake_force();
 
+    Eigen::Vector2f wheel_lat_force(float angle);
+
     float dvl_dt();
+    float dvt_dt();
+    float dtc_dt();
 
     std::tuple<float, float> wheel_rots(float curr_ts);
 
